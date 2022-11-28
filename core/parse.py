@@ -4,6 +4,8 @@ import subprocess
 import argparse
 import re
 import numpy as np
+from framework import *
+from constants import *
 
 printable_cnt = 0
 
@@ -42,7 +44,7 @@ class PyCode:
             if len(last_el) == 0:
                 self.code += "\nres[" + str(printable_cnt) + "] = ''"  
             else:
-                self.code += "\nres[" + str(printable_cnt) + "] = latex(" + last_el + ")" 
+                self.code += "\nfrom framework import *\nres[" + str(printable_cnt) + "] = latex(" + last_el + ")" 
                 
             printable_cnt += 1
 
@@ -113,9 +115,8 @@ def find_pycode(text):
 
 def delete_coms_def(text):
 
-    text = text.replace("\\long\\def\\code#1{}", "")
-    text = text.replace("\\long\\def\\codep#1{}", "")
-
+    text = text.replace(tex_comms[0], "")
+    text = text.replace(tex_comms[1], "")
     return text
 
 
@@ -188,6 +189,7 @@ def check_exec_result(res, text, all_code, size, file_name):
 
         exit(1)
     else:
+        del res['error']
         return 0
 
 
@@ -197,6 +199,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "file", metavar="LatexCode.tex", type=str,
         help="path to .tex file to be parsed"
+    )
+    parser.add_argument(
+        "--keep_json",
+        help="keeps data.json after running", action="store_true"
     )
     args = parser.parse_args()
 
@@ -209,11 +215,8 @@ if __name__ == "__main__":
     text = delete_comms(text)
 
     cur_code = []
-
     size = 0
-
     output = []
-
     all_code = "print('{')"
 
     for i in range(text.count(PyCode.code_exec)):
@@ -225,23 +228,8 @@ if __name__ == "__main__":
 
     new_text = text
 
-    tmp = "from sympy import latex"
-
-    if tmp not in all_code:
-        all_code = tmp + "\n" + all_code
-
     with open("run_prog.py", "w") as f:
-
-        all_code = (
-            "\nimport traceback\ntry:\n    exec('''\n" +
-            "res = {'error' : 'False'}\n"
-            + all_code + "\n" + "import json\nwith open('data.json', 'w') as fp:\n" + 
-            "    json.dump(res, fp)" + "''')" + 
-            "\nexcept:\n    import json\n" + "    res = {'error' : 'True'}\n" + 
-            "    res['descr'] = traceback.format_exc()\n" +
-            "    with open('data.json', 'w') as fp:\n" + 
-            "        json.dump(res, fp)"
-        )
+        all_code = runprog_code[0] + all_code + runprog_code[1]
 
         f.write(all_code)
         f.close()
@@ -256,17 +244,17 @@ if __name__ == "__main__":
     check_exec_result(res, text, all_code, size, tex_f)  # обратока ошибок
 
     #d = json.loads(res.replace("\\", "\\\\"))
-    #d = {int(k): v for k, v in d.items()}
     d = res
+    d = {int(k): v for k, v in d.items()}
 
-    t = '0'
+    t = 0
 
     for i in range(len(cur_code)):
 
         if cur_code[i].get_type() == cur_code[i].code_print:
 
             new_text = new_text.replace(cur_code[i].get_section(), d[t], 1)
-            t = str(int(t)+1)
+            t += 1
 
         else:
 
@@ -280,5 +268,7 @@ if __name__ == "__main__":
         f.close()
 
     os.remove("run_prog.py")
-    os.remove("data.json")
+
+    if not args.keep_json:
+        os.remove("data.json")
     
